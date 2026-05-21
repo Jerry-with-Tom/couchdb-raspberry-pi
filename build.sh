@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-IMAGE_NAME=karasevm/couchdb
+IMAGE_NAME=kin9l/couchdb-pi
 COUCHDB_VERSION=3.5.0
 COUCHDB_VERSION_MAJOR=3
 output='docker'
