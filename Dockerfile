@@ -20,23 +20,28 @@ RUN ./configure --disable-docs --spidermonkey-version 78
 # workaround chromedriver not supporting armv7
 RUN sed -i 's/npm install/npm uninstall chromedriver \&\& npm install/g' Makefile 
 
-# === 修复 arm/v7 编译错误：替换所有 long offset/block_size 为 ErlNifSInt64 ===
-# 1. 替换 "long offset, block_size;" 形式（逗号分隔）
-RUN sed -i 's/\<long\s\+offset\s*,\s*block_size\s*;/ErlNifSInt64 offset, block_size;/' \
-        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
-# 2. 替换 "long result, offset;" 形式（拆分为 long result; ErlNifSInt64 offset;）
-RUN sed -i 's/\<long\s\+result\s*,\s*offset\s*;/long result; ErlNifSInt64 offset;/' \
-        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
-# 3. 单独替换 "long offset;"（防止漏掉）
-RUN sed -i 's/\<long\s\+offset\s*;/ErlNifSInt64 offset;/' \
-        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
-# 4. 单独替换 "long block_size;"
-RUN sed -i 's/\<long\s\+block_size\s*;/ErlNifSInt64 block_size;/' \
-        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
-# 5. 可选：将 enif_get_int64 调用中的 &offset 强制转换（避免隐式警告，但一般不需要）
-# RUN sed -i 's/\(enif_get_int64([^,]*,[^,]*,\s*\)&offset/\1(ErlNifSInt64*)&offset/g' \
-#         /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
-# ===========================================
+# 应用补丁修复 armv7 编译错误
+RUN printf '%s\n' '--- a/src/couch/priv/couch_cfile/couch_cfile.c' \
+    '+++ b/src/couch/priv/couch_cfile/couch_cfile.c' \
+    '@@ -366,9 +366,9 @@ static int pread_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])' \
+    '     if (argc != 3)' \
+    '         return enif_make_badarg(env);' \
+    ' ' \
+    '-    long offset, block_size;' \
+    '+    ErlNifSInt64 offset, block_size;' \
+    ' ' \
+    '     if (!enif_get_int64(env, argv[1], &offset)' \
+    '         || !enif_get_int64(env, argv[2], &block_size))' \
+    '@@ -388,7 +388,7 @@ static int pwrite_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])' \
+    '     if (argc != 4)' \
+    '         return enif_make_badarg(env);' \
+    ' ' \
+    '-    long result, offset;' \
+    '+    long result; ErlNifSInt64 offset;' \
+    ' ' \
+    '     char *buf;' \
+    '     int flags;' > /tmp/couch_cfile.patch \
+    && cd /couchdb && patch -p1 < /tmp/couch_cfile.patch
 
 RUN make release
 
