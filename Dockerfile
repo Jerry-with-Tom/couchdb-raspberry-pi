@@ -20,28 +20,13 @@ RUN ./configure --disable-docs --spidermonkey-version 78
 # workaround chromedriver not supporting armv7
 RUN sed -i 's/npm install/npm uninstall chromedriver \&\& npm install/g' Makefile 
 
-# 应用补丁修复 armv7 编译错误
-RUN printf '%s\n' '--- a/src/couch/priv/couch_cfile/couch_cfile.c' \
-    '+++ b/src/couch/priv/couch_cfile/couch_cfile.c' \
-    '@@ -366,9 +366,9 @@ static int pread_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])' \
-    '     if (argc != 3)' \
-    '         return enif_make_badarg(env);' \
-    ' ' \
-    '-    long offset, block_size;' \
-    '+    ErlNifSInt64 offset, block_size;' \
-    ' ' \
-    '     if (!enif_get_int64(env, argv[1], &offset)' \
-    '         || !enif_get_int64(env, argv[2], &block_size))' \
-    '@@ -388,7 +388,7 @@ static int pwrite_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])' \
-    '     if (argc != 4)' \
-    '         return enif_make_badarg(env);' \
-    ' ' \
-    '-    long result, offset;' \
-    '+    long result; ErlNifSInt64 offset;' \
-    ' ' \
-    '     char *buf;' \
-    '     int flags;' > /tmp/couch_cfile.patch \
-    && cd /couchdb && patch -p1 < /tmp/couch_cfile.patch
+# 修复 arm/v7 编译错误：替换 offset/block_size 类型
+RUN sed -i 's/long offset, block_size;/ErlNifSInt64 offset, block_size;/' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    sed -i 's/long result, offset;/long result; ErlNifSInt64 offset;/' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    # 验证替换是否成功（可选，打印修改后的行）
+    grep -n "ErlNifSInt64 offset" /couchdb/src/couch/priv/couch_cfile/couch_cfile.c || true
 
 RUN make release
 
