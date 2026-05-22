@@ -20,13 +20,21 @@ RUN ./configure --disable-docs --spidermonkey-version 78
 # workaround chromedriver not supporting armv7
 RUN sed -i 's/npm install/npm uninstall chromedriver \&\& npm install/g' Makefile 
 
-# 修复 arm/v7 编译错误：替换 offset/block_size 类型
-RUN sed -i 's/long offset, block_size;/ErlNifSInt64 offset, block_size;/' \
+# Fix 32-bit (arm/v7) compilation: long is 4 bytes but ErlNifSInt64 is 8 bytes
+RUN sed -i 's/static long efile_preadv(int fd, long offset/static long efile_preadv(int fd, off_t offset/' \
         /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
-    sed -i 's/long result, offset;/long result; ErlNifSInt64 offset;/' \
+    sed -i 's/unsigned long bytes_read;/size_t bytes_read;/' \
         /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
-    # 验证替换是否成功（可选，打印修改后的行）
-    grep -n "ErlNifSInt64 offset" /couchdb/src/couch/priv/couch_cfile/couch_cfile.c || true
+    sed -i '/^static long efile_preadv/,/^}/{ s/long result;/ssize_t result;/; }' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    sed -i 's/long bytes_written;/ssize_t bytes_written;/g' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    sed -i 's/long offset, block_size, bytes_read;/ErlNifSInt64 offset, block_size; ssize_t bytes_read;/' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    sed -i 's/long result, offset;/ssize_t result; ErlNifSInt64 offset;/' \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c && \
+    grep -n "ErlNifSInt64\|off_t offset\|size_t bytes_read\|ssize_t result\|ssize_t bytes_written" \
+        /couchdb/src/couch/priv/couch_cfile/couch_cfile.c
 
 RUN make release
 
